@@ -54,7 +54,7 @@
 <script src="data.js"></script>
 <script src="audio.js"></script>
 <script>
-const ROUND = 5;   // syllables per round (short session)
+const ROUND = 3;   // syllables per round (short session)
 const $ = (id) => document.getElementById(id);
 const shuffle = (a) => a.sort(() => Math.random() - 0.5);
 const nameOf = (ch) => LETTERS.find(l => l.letter === ch.toUpperCase()).say;   // 'b' gives 'bi'
