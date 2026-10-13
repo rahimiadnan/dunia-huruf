@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ujian Suara - Dunia Huruf</title>
+<style>
+  body { font-family: sans-serif; background:#7ec850; text-align:center; padding:20px; }
+  button { font-size:22px; padding:15px 25px; margin:10px; border:4px solid #3b2a1a;
+           background:#a0703c; color:white; border-radius:6px; }
+  #log { background:#fff; padding:15px; margin-top:20px; text-align:left;
+         border:4px solid #3b2a1a; font-size:16px; }
+  #heard { font-size:40px; font-weight:bold; margin:20px; }
+</style>
+</head>
+<body>
+  <h1>🧪 Ujian Suara</h1>
+  <button onclick="speakTest()">🔊 Cakap</button>
+  <button onclick="listenTest()">🎤 Dengar</button>
+  <div id="heard">...</div>
+  <div id="log"></div>
+
+<script>
+const log = (msg) => document.getElementById('log').innerHTML += msg + '<br>';
+let malayVoice = null;
+
+// 1. Security check: tells us if Chrome will even allow the mic
+log('🔒 Secure context: ' + (window.isSecureContext ? '✅ YA' : '❌ TIDAK (mic akan disekat)'));
+log('🌐 Alamat: ' + location.origin);
+
+function pickVoice() {
+  const voices = speechSynthesis.getVoices();
+  if (!voices.length) return;   // voices not loaded yet, wait for the next event
+  malayVoice = voices.find(v => v.lang.toLowerCase().startsWith('ms'))
+            || voices.find(v => v.name.toLowerCase().includes('malay'))
+            || voices.find(v => v.lang.toLowerCase().startsWith('id'));
+  log('🗣️ Suara dipilih: ' + (malayVoice ? malayVoice.name + ' (' + malayVoice.lang + ')' : '❌ Tiada'));
+}
+speechSynthesis.onvoiceschanged = pickVoice;
+pickVoice();
+
+function speakTest() {
+  const u = new SpeechSynthesisUtterance('A. A untuk Ayam! Bagus, pandai!');
+  u.lang = 'ms-MY';
+  if (malayVoice) u.voice = malayVoice;
+  u.rate = 0.85;
+  u.pitch = 1.2;
+  speechSynthesis.speak(u);
+}
+
+async function listenTest() {
+  // 2. Ask for mic permission first, which shows a clearer error
+  if (!navigator.mediaDevices) {
+    log('❌ Halaman tidak selamat. Guna localhost / https / chrome flag.');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());   // just testing permission
+    log('🎤 Kebenaran mic: ✅');
+  } catch (err) {
+    log('❌ Mic disekat: ' + err.name);
+    return;
+  }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { log('❌ Pelayar tidak sokong. Guna Chrome.'); return; }
+  const rec = new SR();
+  rec.lang = 'ms-MY';
+  rec.maxAlternatives = 5;
+  document.getElementById('heard').textContent = '👂 Sedang dengar...';
+  rec.onresult = (e) => {
+    const alts = [...e.results[0]].map(r => r.transcript + ' (' + r.confidence.toFixed(2) + ')');
+    document.getElementById('heard').textContent = e.results[0][0].transcript;
+    log('Dengar: ' + alts.join(' | '));
+  };
+  rec.onerror = (e) => log('❌ Ralat: ' + e.error);
+  rec.start();
+}
+</script>
+</body>
+</html>
