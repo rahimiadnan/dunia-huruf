@@ -11,6 +11,7 @@
   .card { border:4px solid #3b2a1a; padding:10px; text-align:center; cursor:pointer; }
   .card b { font-size:36px; display:block; }
   .card span { font-size:30px; }
+  .mc .card { color:#fff; text-shadow:2px 2px #000; }
 </style>
 </head>
 <body>
@@ -18,30 +19,49 @@
 
 <script src="data.js"></script>
 <script>
-let voice = null;
-speechSynthesis.onvoiceschanged = () => {
-  const v = speechSynthesis.getVoices();
-  voice = v.find(x => x.lang.toLowerCase().startsWith('ms')) || v.find(x => x.lang.startsWith('id'));
-};
+let msVoice = null, enVoice = null;
 
-function speak(text) {
+function loadVoices() {
+  const v = speechSynthesis.getVoices();
+  msVoice = v.find(x => x.lang.toLowerCase().startsWith('ms')) || v.find(x => x.lang.startsWith('id'));
+  enVoice = v.find(x => x.lang === 'en-US') || v.find(x => x.lang.startsWith('en'));
+}
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+// lang: 'ms' for Malay, 'en' for English
+function speak(text, lang = 'ms') {
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'ms-MY'; if (voice) u.voice = voice;
+  if (lang === 'en') { u.lang = 'en-US'; if (enVoice) u.voice = enVoice; }
+  else               { u.lang = 'ms-MY'; if (msVoice) u.voice = msVoice; }
   u.rate = 0.8; u.pitch = 1.2;
   speechSynthesis.speak(u);
 }
 
 let html = '';
+
+// Malay biomes
 BIOMES.forEach(b => {
   html += `<h2>${b.emoji} ${b.name}</h2><div class="grid">`;
   LETTERS.filter(l => b.letters.includes(l.letter)).forEach(l => {
     html += `<div class="card" style="background:${b.color}"
-               onclick="speak('${l.say}. ${l.say} untuk ${l.word}. ${l.syl.join(', ')}. ${l.word}')">
+               onclick="speak('${l.say}. ${l.say} untuk ${l.word}. ${l.syl.join(', ')}. ${l.word}', 'ms')">
                <b>${l.letter}</b><span>${l.emoji}</span><div>${l.word}</div></div>`;
   });
   html += '</div>';
 });
+
+// Minecraft section (English)
+const m = MINECRAFT_SECTION;
+html += `<h2>${m.emoji} ${m.name} (English)</h2><div class="grid mc">`;
+MINECRAFT_ABC.forEach(l => {
+  html += `<div class="card" style="background:${m.color}"
+             onclick="speak('${l.letter}. ${l.letter} is for ${l.word}!', 'en')">
+             <b>${l.letter}</b><span>${l.emoji}</span><div>${l.word}</div></div>`;
+});
+html += '</div>';
+
 html += `<h2>🔤 Suku Kata: B</h2><p>${makeSyllables('b').join(' - ')}</p>`;
 html += `<h2>📖 Perkataan</h2><p>${WORDS.map(w => w.emoji + ' ' + w.word).join(' &nbsp; ')}</p>`;
 document.getElementById('app').innerHTML = html;

@@ -19,7 +19,7 @@ const LETTERS = [
   { letter:'B', say:'bi',       word:'Beruang',  emoji:'🐻', syl:['be','ru','ang'],     type:'haiwan', accept:['b','bi','be','bee','beruang'] },
   { letter:'C', say:'si',       word:'Cicak',    emoji:'🦎', syl:['ci','cak'],          type:'haiwan', accept:['c','si','see','sea','cicak'] },
   { letter:'D', say:'di',       word:'Dinosaur', emoji:'🦖', syl:['di','no','sa','ur'], type:'haiwan', accept:['d','di','dee','dinosaur'] },
-  { letter:'E', say:'i',        word:'Elang',    emoji:'🦅', syl:['e','lang'],          type:'haiwan', accept:['e','i','ee','elang'] },
+  { letter:'E', say:'i',        word:'Emak',     emoji:'👩', syl:['e','mak'],           type:'orang',  accept:['e','i','ee','emak','mak'] },
   { letter:'F', say:'ef',       word:'Flamingo', emoji:'🦩', syl:['fla','min','go'],    type:'haiwan', accept:['f','ef','eff','flamingo'] },
   { letter:'G', say:'ji',       word:'Gajah',    emoji:'🐘', syl:['ga','jah'],          type:'haiwan', accept:['g','ji','jee','gajah'] },
   { letter:'H', say:'eic',      word:'Harimau',  emoji:'🐯', syl:['ha','ri','mau'],     type:'haiwan', accept:['h','eic','eich','harimau'] },
@@ -31,14 +31,14 @@ const LETTERS = [
   { letter:'N', say:'en',       word:'Naga',     emoji:'🐉', syl:['na','ga'],           type:'haiwan', accept:['n','en','naga'] },
   { letter:'O', say:'o',        word:'Orang Utan', emoji:'🦧', syl:['o','rang','u','tan'], type:'haiwan', accept:['o','oh','orang utan'] },
   { letter:'P', say:'pi',       word:'Penguin',  emoji:'🐧', syl:['pe','ngu','in'],     type:'haiwan', accept:['p','pi','pee','penguin'] },
-  { letter:'Q', say:'kiu',      word:'Quokka',   emoji:'🦘', syl:['quok','ka'],         type:'haiwan', accept:['q','kiu','queue','cue','quokka'] },
+  { letter:'Q', say:'kiu',      word:'Queen Ant', emoji:'🐜', syl:['queen','ant'],      type:'haiwan', accept:['q','kiu','queue','cue','queen','queen ant'] },
   { letter:'R', say:'ar',       word:'Rusa',     emoji:'🦌', syl:['ru','sa'],           type:'haiwan', accept:['r','ar','are','rusa'] },
   { letter:'S', say:'es',       word:'Serigala', emoji:'🐺', syl:['se','ri','ga','la'], type:'haiwan', accept:['s','es','ess','serigala'] },
   { letter:'T', say:'ti',       word:'Tikus',    emoji:'🐭', syl:['ti','kus'],          type:'haiwan', accept:['t','ti','tea','tee','tikus'] },
   { letter:'U', say:'yu',       word:'Ular',     emoji:'🐍', syl:['u','lar'],           type:'haiwan', accept:['u','yu','you','ular'] },
   { letter:'V', say:'vi',       word:'Van',      emoji:'🚐', syl:['van'],               type:'benda',  accept:['v','vi','vee','van'] },
   { letter:'W', say:'dabel yu', word:'Walrus',   emoji:'🦭', syl:['wal','rus'],         type:'haiwan', accept:['w','dabel yu','double you','walrus'] },
-  { letter:'X', say:'eks', word:'X-Ray', emoji:'🩻', syl:['x','ray'],     type:'benda',  accept:['x','eks','ex','xray','x-ray'] },
+  { letter:'X', say:'eks',      word:'X-ray',    emoji:'🩻', syl:['eks','rei'],         type:'benda',  accept:['x','eks','ex','x-ray','xray','eks rei'] },
   { letter:'Y', say:'wai',      word:'Yak',      emoji:'🐂', syl:['yak'],               type:'haiwan', accept:['y','wai','why','yak'] },
   { letter:'Z', say:'zed',      word:'Zirafah',  emoji:'🦒', syl:['zi','ra','fah'],     type:'haiwan', accept:['z','zed','zee','zirafah'] }
 ];
@@ -77,3 +77,35 @@ const PHRASES = {
 
 // --- Helper: pick a random item from a list ---
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+// --- Special section: Minecraft Alphabet (ENGLISH) ---
+// lang 'en' tells the game to speak/listen in English for this section
+const MINECRAFT_SECTION = { id:'minecraft', name:'Minecraft Alphabet', emoji:'⛏️', color:'#8b8b8b', lang:'en' };
+
+const MINECRAFT_ABC = [
+  { letter:'A', word:'Axe',        emoji:'🪓', accept:['a','axe','ax'] },
+  { letter:'B', word:'Bee',        emoji:'🐝', accept:['b','bee','be'] },
+  { letter:'C', word:'Creeper',    emoji:'🟩', accept:['c','see','creeper'] },
+  { letter:'D', word:'Diamond',    emoji:'💎', accept:['d','dee','diamond'] },
+  { letter:'E', word:'Enderman',   emoji:'⬛', accept:['e','ee','enderman','ender man'] },
+  { letter:'F', word:'Fox',        emoji:'🦊', accept:['f','ef','fox'] },
+  { letter:'G', word:'Ghast',      emoji:'👻', accept:['g','gee','ghast','gast'] },
+  { letter:'H', word:'Horse',      emoji:'🐴', accept:['h','aitch','horse'] },
+  { letter:'I', word:'Iron Golem', emoji:'🤖', accept:['i','eye','iron golem','golem'] },
+  { letter:'J', word:'Jellyfish',  emoji:'🪼', accept:['j','jay','jellyfish','jelly fish'] },
+  { letter:'K', word:'Kangaroo',   emoji:'🦘', accept:['k','kay','kangaroo'] },
+  { letter:'L', word:'Llama',      emoji:'🦙', accept:['l','el','llama','lama'] },
+  { letter:'M', word:'Monkey',     emoji:'🐒', accept:['m','em','monkey'] },
+  { letter:'N', word:'Ninja',      emoji:'🥷', accept:['n','en','ninja'] },
+  { letter:'O', word:'Ocelot',     emoji:'🐆', accept:['o','oh','ocelot'] },
+  { letter:'P', word:'Pig',        emoji:'🐷', accept:['p','pee','pig'] },
+  { letter:'Q', word:'Quartz',     emoji:'⬜', accept:['q','queue','cue','quartz'] },
+  { letter:'R', word:'Rabbit',     emoji:'🐰', accept:['r','are','rabbit'] },
+  { letter:'S', word:'Skeleton',   emoji:'💀', accept:['s','ess','skeleton'] },
+  { letter:'T', word:'Tiger',      emoji:'🐯', accept:['t','tee','tea','tiger'] },
+  { letter:'U', word:'Unicorn',    emoji:'🦄', accept:['u','you','unicorn'] },
+  { letter:'V', word:'Villager',   emoji:'🧑‍🌾', accept:['v','vee','villager'] },
+  { letter:'W', word:'Wolf',       emoji:'🐺', accept:['w','double you','wolf'] },
+  { letter:'X', word:'Xbox',       emoji:'🎮', accept:['x','ex','xbox','x box'] },
+  { letter:'Y', word:'Yak',        emoji:'🐂', accept:['y','why','yak'] },
+  { letter:'Z', word:'Zombie',     emoji:'🧟', accept:['z','zee','zed','zombie'] }
+];
