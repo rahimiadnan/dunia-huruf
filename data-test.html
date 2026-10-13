@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ujian Data</title>
+<style>
+  body { font-family:sans-serif; background:#7ec850; margin:0; padding:15px; }
+  h2 { color:#fff; text-shadow:2px 2px #3b2a1a; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:10px; }
+  .card { border:4px solid #3b2a1a; padding:10px; text-align:center; cursor:pointer; }
+  .card b { font-size:36px; display:block; }
+  .card span { font-size:30px; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+
+<script src="data.js"></script>
+<script>
+let voice = null;
+speechSynthesis.onvoiceschanged = () => {
+  const v = speechSynthesis.getVoices();
+  voice = v.find(x => x.lang.toLowerCase().startsWith('ms')) || v.find(x => x.lang.startsWith('id'));
+};
+
+function speak(text) {
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ms-MY'; if (voice) u.voice = voice;
+  u.rate = 0.8; u.pitch = 1.2;
+  speechSynthesis.speak(u);
+}
+
+let html = '';
+BIOMES.forEach(b => {
+  html += `<h2>${b.emoji} ${b.name}</h2><div class="grid">`;
+  LETTERS.filter(l => b.letters.includes(l.letter)).forEach(l => {
+    html += `<div class="card" style="background:${b.color}"
+               onclick="speak('${l.say}. ${l.say} untuk ${l.word}. ${l.syl.join(', ')}. ${l.word}')">
+               <b>${l.letter}</b><span>${l.emoji}</span><div>${l.word}</div></div>`;
+  });
+  html += '</div>';
+});
+html += `<h2>🔤 Suku Kata: B</h2><p>${makeSyllables('b').join(' - ')}</p>`;
+html += `<h2>📖 Perkataan</h2><p>${WORDS.map(w => w.emoji + ' ' + w.word).join(' &nbsp; ')}</p>`;
+document.getElementById('app').innerHTML = html;
+</script>
+</body>
+</html>
