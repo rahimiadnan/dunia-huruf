@@ -64,7 +64,10 @@ const WORDS = [
   { word:'nasi', syl:['na','si'], emoji:'🍚' },
   { word:'gigi', syl:['gi','gi'], emoji:'🦷' },
   { word:'ibu',  syl:['i','bu'],  emoji:'👩' },
-  { word:'bapa', syl:['ba','pa'], emoji:'👨' }
+  { word:'bapa', syl:['ba','pa'], emoji:'👨' },
+  { word:'kuda', syl:['ku','da'], emoji:'🐴' },
+  { word:'rusa', syl:['ru','sa'], emoji:'🦌' },
+  { word:'kera', syl:['ke','ra'], emoji:'🐒' },
 ];
 
 // --- Gentle feedback phrases (used in Part 4) ---

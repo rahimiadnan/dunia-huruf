@@ -34,8 +34,18 @@
 
   <div id="table" class="table"></div>
   <div id="tiles" class="tiles"></div>
+
+  <!-- Mic panel (his turn to speak) -->
+  <div id="micPanel" class="hidden" style="text-align:center; padding:10px">
+    <div class="pWord" style="color:#fff; text-shadow:3px 3px #000">Sebut: <span id="micWord"></span></div>
+    <button id="micBtn" class="btn green" style="font-size:48px; padding:15px 30px" onclick="tapMic()">🎤</button>
+    <div id="heardText" style="color:#fff; font-size:20px; margin:8px">&nbsp;</div>
+    <button class="btn" style="font-size:14px" onclick="parentOK()">👨 Ayah: Betul</button>
+  </div>
+
   <div class="bag">🏠 <span id="bag"></span></div>
 
+  <!-- Win popup -->
   <div id="win" class="popup hidden">
     <div class="card">
       <div class="pEmoji">🏆</div>
@@ -47,17 +57,31 @@
 
 <script src="data.js"></script>
 <script src="audio.js"></script>
+<script src="listen.js"></script>
+<script src="memory.js"></script>
 <script>
 const ROUND = 3;   // words per round
 const $ = (id) => document.getElementById(id);
 const shuffle = (a) => a.sort(() => Math.random() - 0.5);
 
 let queue, word, step, tries, busy;
+let micBusy = false, micTries = 0;
 
+// ===== ROUND SETUP =====
 function startRound() {
   $('win').classList.add('hidden');
   $('bag').innerHTML = '';
-  queue = shuffle([...WORDS]).slice(0, ROUND);
+
+  const ids = Memory.pickItems(
+    'word',
+    WORDS.map(w => w.word),
+    ROUND
+  );
+
+  queue = ids.map(id =>
+    WORDS.find(w => w.word === id)
+  );
+
   nextWord();
 }
 
@@ -70,6 +94,9 @@ function makeDecoys(syl) {
 function nextWord() {
   if (!queue.length) return winRound();
   word = queue.shift(); step = 0; tries = 0; busy = false;
+  micBusy = false; micTries = 0;
+  $('micPanel').classList.add('hidden');
+  $('tiles').style.display = '';
   $('pic').textContent = word.emoji;
 
   // Slots: [ ] + [ ] = [ ? ]
@@ -92,6 +119,7 @@ function nextWord() {
 
 function sayWord() { Voice.speak(`Jom bina: ${word.word}!`); }
 
+// ===== BUILDING THE WORD =====
 function tapTile(t) {
   if (busy) return;
   const need = word.syl[step];
@@ -117,11 +145,69 @@ async function build() {
   $('res').textContent = word.word.toUpperCase();
   $('res').classList.add('glow');
   await Voice.speak(word.syl.join('... ') + '... ' + word.word + '!');   // "bo... la... bola!"
-  await Voice.speak(`${word.word}! ${pick(PHRASES.correct)}`);
-  $('bag').innerHTML += `<span style="margin:0 6px">${word.emoji}<b style="color:#fff;font-size:18px">${word.word.toUpperCase()}</b></span>`;
+  $('res').classList.remove('glow');
+
+  // His turn to say it
+  micTries = 0; micBusy = false;
+  $('tiles').style.display = 'none';
+  $('micWord').textContent = word.word.toUpperCase();
+  $('heardText').innerHTML = '&nbsp;';
+  $('micPanel').classList.remove('hidden');
+  await Voice.speak('Giliran kamu! Tekan mikrofon, sebut: ' + word.word);
+}
+
+// ===== MIC: HE SAYS IT, THE GAME LISTENS =====
+async function tapMic() {
+  if (micBusy) return;
+  micBusy = true;
+  speechSynthesis.cancel();                  // stop talking so the mic doesn't hear the game
+  const btn = $('micBtn');
+  btn.textContent = '👂'; btn.classList.add('glow');
+  SFX.beep(880, 0.12, 'sine');               // "your turn" ping
+  const heard = await Listen.hear('ms');
+  btn.textContent = '🎤'; btn.classList.remove('glow');
+  $('heardText').textContent = heard.length ? '👂 ' + heard[0] : '👂 ...';
+
+  if (!heard.length) {                       // heard nothing: no penalty
+    await Voice.speak('Tak dengar lah. Cakap kuat sikit ya!');
+  } else if (isMatch(heard, [word.word])) {
+    return micSuccess(true);
+  } else {
+    micTries++;
+    if (micTries === 1) {
+      await Voice.speak('Hmm, hampir betul! Dengar sekali lagi ya... ' + word.word);
+    } else if (micTries === 2) {             // slow, with glowing syllables
+      await Voice.speak('Tak apa. Dengar perlahan-lahan...');
+      for (let i = 0; i < word.syl.length; i++) {
+        $('s' + i).classList.add('glow');
+        await Voice.speak(word.syl[i]);
+        $('s' + i).classList.remove('glow');
+      }
+      await Voice.speak(word.word + '. Cuba lagi!');
+    } else {                                 // 3rd miss: say it together, move on
+      await Voice.speak('Jom sebut sama-sama! ' + word.syl.join('... ') + '... ' + word.word + '!');
+      return micSuccess(false);
+    }
+  }
+  micBusy = false;
+}
+
+async function micSuccess(byHimself) {
+  $('micPanel').classList.add('hidden');
+  SFX.win();
+  const star = byHimself ? '⭐' : '';
+  $('bag').innerHTML += `<span style="margin:0 6px">${word.emoji}<b style="color:#fff;font-size:18px">${word.word.toUpperCase()}</b>${star}</span>`;
+  await Voice.speak(byHimself ? word.word + '! ' + pick(PHRASES.correct) : 'Bagus, kita sebut sama-sama!');
   setTimeout(nextWord, 600);
 }
 
+function parentOK() {
+  if (micBusy) return;
+  micBusy = true;
+  micSuccess(true);
+}
+
+// ===== HELPERS =====
 function glow(s) { document.querySelectorAll('.tile:not(.used)').forEach(t => t.classList.toggle('glow', t.dataset.s === s)); }
 function clearGlow() { document.querySelectorAll('.tile').forEach(t => t.classList.remove('glow')); }
 
