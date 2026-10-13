@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>⛏️ Lombong Huruf</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="sky">
+    <h1>⛏️ Lombong Huruf</h1>
+    <select id="setPick" class="btn"></select>
+    <div id="hint">Ketuk blok 3 kali untuk melombong!</div>
+  </div>
+
+  <div id="mine" class="mine"></div>
+  <div class="bag">🎒 <span id="bag"></span></div>
+
+  <!-- Letter popup -->
+  <div id="popup" class="popup hidden">
+    <div class="card">
+      <div id="pLetter" class="pLetter"></div>
+      <div id="pEmoji" class="pEmoji"></div>
+      <div id="pWord" class="pWord"></div>
+      <button class="btn" onclick="sayCurrent()">🔊 Dengar lagi</button>
+      <button class="btn green" onclick="closePopup()">✅ OK</button>
+    </div>
+  </div>
+
+  <!-- Win popup -->
+  <div id="win" class="popup hidden">
+    <div class="card">
+      <div class="pEmoji">🏆</div>
+      <div id="winText" class="pWord"></div>
+      <div id="winBag" style="font-size:36px; margin-bottom:10px;"></div>
+      <button class="btn green" onclick="startRound()">🔁 Main lagi</button>
+    </div>
+  </div>
+
+<script src="data.js"></script>
+<script src="audio.js"></script>
+<script>
+const HITS = 2;          // taps needed to break a block
+const BLOCKS = 6;        // blocks per round (short session)
+const BLOCK_BY_BIOME = { padang:'grass', hutan:'wood', gurun:'sand', salji:'snow', laut:'water', minecraft:'stone' };
+const $ = (id) => document.getElementById(id);
+const shuffle = (a) => a.sort(() => Math.random() - 0.5);
+
+let current = null, remaining = 0, lang = 'ms', popupOpen = false;
+
+// Fill the world selector
+const sel = $('setPick');
+BIOMES.forEach(b => sel.add(new Option(b.emoji + ' ' + b.name, b.id)));
+sel.add(new Option('⛏️ Minecraft (English)', 'minecraft'));
+sel.onchange = startRound;
+
+function getItems(id) {
+  if (id === 'minecraft') {
+    lang = 'en';
+    return shuffle([...MINECRAFT_ABC]).slice(0, BLOCKS).map(x => ({ ...x, lang:'en' }));
+  }
+  lang = 'ms';
+  const b = BIOMES.find(x => x.id === id);
+  return LETTERS.filter(l => b.letters.includes(l.letter)).slice(0, BLOCKS).map(x => ({ ...x, lang:'ms' }));
+}
+
+function startRound() {
+  $('win').classList.add('hidden');
+  $('bag').innerHTML = '';
+  const blockType = BLOCK_BY_BIOME[sel.value];
+  let items = getItems(sel.value);
+  while (items.length < BLOCKS) items.push({ bonus:true });   // fill gaps with 💎
+  items = shuffle(items);
+  remaining = items.length;
+
+  $('mine').innerHTML = '';
+  items.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'block ' + blockType;
+    el.dataset.hit = 0;
+    el.onclick = () => hitBlock(el, item);
+    $('mine').appendChild(el);
+  });
+}
+
+function hitBlock(el, item) {
+  if (el.classList.contains('mined') || popupOpen) return;
+  const hit = +el.dataset.hit + 1;
+  el.dataset.hit = hit;
+  SFX.hit();
+  el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+  if (hit >= HITS) breakBlock(el, item);
+}
+
+function breakBlock(el, item) {
+  SFX.pop();
+  particles(el);
+  el.className = 'block mined';
+  el.innerHTML = item.bonus ? '💎' : item.letter;
+  remaining--;
+  if (item.bonus) {
+    addToBag('💎');
+    Voice.speak(lang === 'en' ? 'Wow! An emerald!' : 'Wah! Zamrud!', lang).then(checkWin);
+    return;
+  }
+  showPopup(item);
+}
+
+function particles(el) {
+  const r = el.getBoundingClientRect();
+  const color = getComputedStyle(el).getPropertyValue('--p').trim() || '#8b5a2b';
+  for (let i = 0; i < 10; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = (r.left + r.width / 2) + 'px';
+    p.style.top = (r.top + r.height / 2 + window.scrollY) + 'px';
+    p.style.background = color;
+    p.style.setProperty('--dx', (Math.random() * 160 - 80) + 'px');
+    p.style.setProperty('--dy', (Math.random() * -140 - 20) + 'px');
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 700);
+  }
+}
+
+function showPopup(item) {
+  current = item; popupOpen = true;
+  $('pLetter').textContent = item.letter + ' ' + item.letter.toLowerCase();
+  $('pEmoji').textContent = item.emoji;
+  $('pWord').textContent = item.word;
+  $('popup').classList.remove('hidden');
+  sayCurrent();
+}
+
+function sayCurrent() {
+  const l = current;
+  const text = l.lang === 'en'
+    ? `${l.letter}! ${l.letter} is for ${l.word}! Can you say ${l.letter}?`
+    : `${l.say}! ${l.say} untuk ${l.word}. Cuba sebut: ${l.say}!`;
+  Voice.speak(text, l.lang);
+}
+
+function closePopup() {
+  $('popup').classList.add('hidden');
+  popupOpen = false;
+  addToBag(current.emoji);
+  const praise = current.lang === 'en' ? pick(['Great!', 'Awesome!', 'Well done!']) : pick(PHRASES.correct);
+  Voice.speak(praise, current.lang).then(checkWin);
+}
+
+function addToBag(emoji) { $('bag').innerHTML += `<span class="pEmoji" style="font-size:34px">${emoji}</span> `; }
+
+function checkWin() {
+  if (remaining > 0) return;
+  setTimeout(() => {
+    $('winText').textContent = lang === 'en' ? 'Awesome!' : 'Hebat! Semua dijumpai!';
+    $('winBag').innerHTML = $('bag').innerHTML;
+    $('win').classList.remove('hidden');
+    SFX.win(); confetti();
+    Voice.speak(lang === 'en' ? 'Awesome! You found all the letters!' : 'Hebat! Semua huruf sudah dijumpai!', lang);
+  }, 500);
+}
+
+function confetti() {
+  const colors = ['#5dbb3a', '#3a8fd9', '#ffd700', '#e74c3c', '#17dd62'];
+  for (let i = 0; i < 40; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.background = pick(colors);
+    c.style.animationDelay = Math.random() * 0.5 + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 2600);
+  }
+}
+
+startRound();
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+/* ===== DUNIA HURUF: BLOCKY STYLE ===== */
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { margin:0; font-family:'Courier New', monospace; background:#555; user-select:none; overflow-x:hidden; }
+
+.sky { background:linear-gradient(#6fb8f0, #bfe6ff); padding:12px; text-align:center; }
+h1 { color:#fff; text-shadow:3px 3px #3b2a1a; margin:5px; font-size:28px; }
+#hint { margin-top:8px; font-weight:bold; color:#3b2a1a; }
+
+/* Minecraft-style button */
+.btn { font-family:inherit; font-size:18px; font-weight:bold; padding:10px 16px; margin:5px;
+       border:4px solid #000; background:#8b8b8b; color:#fff; text-shadow:2px 2px #3f3f3f;
+       box-shadow:inset -4px -4px #555, inset 4px 4px #bbb; cursor:pointer; }
+.btn:active { box-shadow:inset 4px 4px #555, inset -4px -4px #bbb; }
+.btn.green { background:#4caf50; box-shadow:inset -4px -4px #2e7d32, inset 4px 4px #81c784; }
+
+/* Mine area */
+.mine { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; padding:15px;
+        max-width:480px; margin:auto; border-top:8px solid #5dbb3a; }
+
+/* Blocks (--p = particle colour when broken) */
+.block { aspect-ratio:1; border:4px solid #000; position:relative; cursor:pointer; }
+.block::before { content:''; position:absolute; inset:0;   /* pixel texture */
+  background-image:linear-gradient(45deg, rgba(0,0,0,.12) 25%, transparent 25% 75%, rgba(0,0,0,.12) 75%),
+                   linear-gradient(45deg, rgba(0,0,0,.12) 25%, transparent 25% 75%, rgba(0,0,0,.12) 75%);
+  background-size:20px 20px; background-position:0 0, 10px 10px; }
+.grass { --p:#8b5a2b; background:linear-gradient(#5dbb3a 0 28%, #8b5a2b 28%); }
+.wood  { --p:#6b4a2b; background:repeating-linear-gradient(90deg, #7a5230 0 12px, #5e3d22 12px 16px); }
+.sand  { --p:#e8d58a; background:#e8d58a; }
+.snow  { --p:#ffffff; background:linear-gradient(#fff 0 30%, #8b5a2b 30%); }
+.water { --p:#3a8fd9; background:#5fa8c9; }
+.stone { --p:#8b8b8b; background:#8b8b8b; }
+
+/* Cracks get darker with each tap */
+.block::after { content:''; position:absolute; inset:0; opacity:0;
+  background:linear-gradient(135deg, transparent 45%, #000 45% 50%, transparent 50%),
+             linear-gradient(45deg, transparent 60%, #000 60% 64%, transparent 64%),
+             linear-gradient(100deg, transparent 30%, #000 30% 34%, transparent 34%); }
+.block[data-hit="1"]::after { opacity:.35; }
+.block[data-hit="2"]::after { opacity:.75; }
+.shake { animation:shake .15s; }
+@keyframes shake { 25% { transform:translate(-4px, 2px); } 75% { transform:translate(4px, -2px); } }
+
+/* Mined block: floating letter, like a dropped item */
+.block.mined { background:rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center;
+               font-size:48px; color:#fff; text-shadow:3px 3px #000; cursor:default;
+               animation:float 1.5s ease-in-out infinite; }
+.block.mined::before, .block.mined::after { display:none; }
+@keyframes float { 50% { transform:translateY(-8px); } }
+
+/* Flying pixel pieces */
+.particle { position:absolute; width:12px; height:12px; border:2px solid #000; pointer-events:none;
+            animation:fly .7s ease-out forwards; z-index:5; }
+@keyframes fly { to { transform:translate(var(--dx), var(--dy)) rotate(180deg); opacity:0; } }
+
+/* Bag */
+.bag { text-align:center; font-size:34px; padding:10px; background:#8b5a2b;
+       border-top:6px solid #3b2a1a; min-height:64px; max-width:480px; margin:auto; }
+
+/* Popups */
+.popup { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex;
+         align-items:center; justify-content:center; z-index:10; }
+.hidden { display:none; }
+.card { background:#c6c6c6; border:6px solid #000; box-shadow:inset -6px -6px #555, inset 6px 6px #fff;
+        padding:20px; text-align:center; width:85%; max-width:380px; animation:popIn .3s; }
+@keyframes popIn { from { transform:scale(.3); } to { transform:scale(1); } }
+.pLetter { font-size:90px; font-weight:bold; color:#fff; text-shadow:5px 5px #000; }
+.pEmoji { font-size:80px; animation:float 1.5s infinite; }
+.pWord { font-size:32px; font-weight:bold; margin:10px; }
+
+/* Confetti */
+.confetti { position:fixed; top:-20px; width:14px; height:14px; z-index:20; animation:fall 2s linear forwards; }
+@keyframes fall { to { transform:translateY(110vh) rotate(360deg); } }

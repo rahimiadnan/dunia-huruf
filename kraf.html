@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🛠️ Meja Kraf</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .table { display:flex; justify-content:center; align-items:center; gap:8px; padding:15px;
+           background:#8b5a2b; border:6px solid #3b2a1a; max-width:480px; margin:15px auto; }
+  .slot, .tile { width:72px; height:72px; border:4px solid #000; display:flex; align-items:center;
+           justify-content:center; font-size:40px; font-weight:bold; color:#fff; text-shadow:3px 3px #000; }
+  .slot { background:#6b6b6b; box-shadow:inset 4px 4px #3f3f3f; }
+  .slot.result { width:100px; background:#5dbb3a; }
+  .op { font-size:32px; color:#fff; font-weight:bold; }
+  .tiles { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; padding:10px; max-width:480px; margin:auto; }
+  .tile { background:#8b8b8b; cursor:pointer; box-shadow:inset -4px -4px #555, inset 4px 4px #bbb; }
+  .tile.vowel { background:#e67e22; box-shadow:inset -4px -4px #a04f0f, inset 4px 4px #f5b06b; }
+  .glow { animation:glow .5s infinite alternate; }
+  @keyframes glow { to { box-shadow:0 0 20px 8px #ffd700; } }
+  .target { font-size:64px; font-weight:bold; color:#fff; text-shadow:4px 4px #3b2a1a; margin-top:10px; }
+</style>
+</head>
+<body>
+  <div class="sky">
+    <h1>🛠️ Meja Kraf</h1>
+    <select id="famPick" class="btn"></select>
+    <div id="hint">Gabung huruf jadi suku kata!</div>
+  </div>
+
+  <div style="text-align:center">
+    <div id="target" class="target"></div>
+    <button class="btn" onclick="sayTarget()">🔊 Dengar</button>
+  </div>
+
+  <div class="table">
+    <div id="s1" class="slot"></div><span class="op">+</span>
+    <div id="s2" class="slot"></div><span class="op">=</span>
+    <div id="res" class="slot result">?</div>
+  </div>
+
+  <div id="tiles" class="tiles"></div>
+  <div class="bag">🧱 <span id="bag"></span></div>
+
+  <div id="win" class="popup hidden">
+    <div class="card">
+      <div class="pEmoji">🏆</div>
+      <div class="pWord">Hebat!</div>
+      <div id="winBag" style="font-size:28px; margin-bottom:10px;"></div>
+      <button class="btn green" onclick="startRound()">🔁 Main lagi</button>
+    </div>
+  </div>
+
+<script src="data.js"></script>
+<script src="audio.js"></script>
+<script>
+const ROUND = 5;   // syllables per round (short session)
+const $ = (id) => document.getElementById(id);
+const shuffle = (a) => a.sort(() => Math.random() - 0.5);
+const nameOf = (ch) => LETTERS.find(l => l.letter === ch.toUpperCase()).say;   // 'b' gives 'bi'
+
+let fam, queue, target, step, tries, busy;
+
+// Family selector: B : ba bi bu be bo
+SYLLABLE_CONSONANTS.forEach(c =>
+  $('famPick').add(new Option(c.toUpperCase() + ' : ' + makeSyllables(c).join(' '), c)));
+$('famPick').onchange = startRound;
+
+function startRound() {
+  $('win').classList.add('hidden');
+  $('bag').innerHTML = '';
+  fam = $('famPick').value;
+  queue = shuffle(makeSyllables(fam)).slice(0, ROUND);
+  nextTarget();
+}
+
+function nextTarget() {
+  if (!queue.length) return winRound();
+  target = queue.shift(); step = 0; tries = 0; busy = false;
+  $('s1').textContent = ''; $('s2').textContent = ''; $('res').textContent = '?';
+  $('target').textContent = target.toUpperCase();
+
+  // Tiles: the family consonant + 1 decoy consonant + all 5 vowels
+  const decoy = pick(SYLLABLE_CONSONANTS.filter(c => c !== fam));
+  $('tiles').innerHTML = '';
+  shuffle([fam, decoy, ...VOWELS]).forEach(ch => {
+    const t = document.createElement('div');
+    t.className = 'tile' + (VOWELS.includes(ch) ? ' vowel' : '');
+    t.textContent = ch.toUpperCase();
+    t.dataset.ch = ch;
+    t.onclick = () => tapTile(t);
+    $('tiles').appendChild(t);
+  });
+  sayTarget();
+}
+
+function sayTarget() { Voice.speak(`Jom buat: ${target}!`); }
+
+function tapTile(t) {
+  if (busy) return;
+  const need = target[step];
+  if (t.dataset.ch === need) {
+    SFX.hit();
+    $(step === 0 ? 's1' : 's2').textContent = need.toUpperCase();
+    Voice.speak(nameOf(need));
+    clearGlow(); tries = 0; step++;
+    if (step === 2) craft();
+  } else {
+    tries++;
+    t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
+    if (tries === 1) Voice.speak('Hmm, hampir! Cuba lagi.');
+    else { Voice.speak('Cari huruf ' + nameOf(need)); glow(need); }   // 2nd miss: show the answer
+  }
+}
+
+async function craft() {
+  busy = true;
+  SFX.pop();
+  $('res').textContent = target.toUpperCase();
+  $('res').classList.add('glow');
+  await Voice.speak(`${nameOf(target[0])}, ${nameOf(target[1])}... ${target}!`);   // "bi, o... bo!"
+  await Voice.speak(`${target}! ${pick(PHRASES.correct)}`);
+  $('res').classList.remove('glow');
+  $('bag').innerHTML += `<b style="color:#fff; margin:0 6px">${target.toUpperCase()}</b>`;
+  setTimeout(nextTarget, 600);
+}
+
+function glow(ch)  { document.querySelectorAll('.tile').forEach(t => t.classList.toggle('glow', t.dataset.ch === ch)); }
+function clearGlow() { document.querySelectorAll('.tile').forEach(t => t.classList.remove('glow')); }
+
+function winRound() {
+  $('winBag').innerHTML = $('bag').innerHTML;
+  $('win').classList.remove('hidden');
+  SFX.win(); confetti();
+  Voice.speak(`Hebat! ${makeSyllables(fam).join(', ')}!`);
+}
+
+function confetti() {
+  const colors = ['#5dbb3a', '#3a8fd9', '#ffd700', '#e74c3c', '#e67e22'];
+  for (let i = 0; i < 40; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.background = pick(colors);
+    c.style.animationDelay = Math.random() * 0.5 + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 2600);
+  }
+}
+
+startRound();
+</script>
+</body>
+</html>
