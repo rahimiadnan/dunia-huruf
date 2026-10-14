@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>👨 Ayah: Progress</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { background:#2b2b2b; }
+  .wrap { max-width:560px; margin:auto; padding:10px; }
+  .panel { background:#c6c6c6; border:4px solid #000; box-shadow:inset 4px 4px #fff, inset -4px -4px #555;
+           padding:12px; margin:12px 0; }
+  .panel h2 { margin:0 0 8px; font-size:20px; }
+  .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; text-align:center; }
+  .card2 { background:#8b5a2b; color:#fff; border:3px solid #000; padding:6px 2px; text-shadow:2px 2px #000; }
+  .num { font-size:26px; font-weight:bold; }
+  .lbl { font-size:12px; }
+  .row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:2px dashed #999; font-size:16px; }
+  .row .name { flex:1; font-weight:bold; }
+  .row .counts { font-size:12px; color:#333; font-weight:normal; }
+  .boxes span { display:inline-block; width:14px; height:14px; border:2px solid #000; margin-right:2px; background:#777; }
+  .boxes span.on { background:#5dbb3a; }
+  .due { font-size:13px; color:#333; min-width:80px; text-align:right; }
+  .due.now { color:#c0392b; font-weight:bold; }
+  textarea { width:100%; height:80px; font-size:12px; box-sizing:border-box; }
+  .tag { display:inline-block; background:#ffd700; border:2px solid #000; padding:2px 6px; margin:3px; font-weight:bold; }
+  .small { font-size:13px; color:#333; }
+  .btn { font-size:15px; margin:4px 2px; }
+</style>
+</head>
+<body>
+  <div class="sky">
+    <h1>👨 Ayah: Progress</h1>
+    <div>Hari ini: <span id="today"></span></div>
+  </div>
+
+  <div class="wrap">
+    <!-- Summary -->
+    <div class="panel">
+      <h2>🧱 Perkataan</h2>
+      <div id="summary" class="cards"></div>
+    </div>
+
+    <!-- Item lists (words, syllables, letters) -->
+    <div id="lists"></div>
+
+    <!-- Mic trouble -->
+    <div class="panel">
+      <h2>🎤 Mic susah dengar</h2>
+      <div class="small">You pressed "Ayah: Betul" 2+ times for these. Add what Chrome hears to their <b>accept</b> list in data.js.</div>
+      <div id="micTrouble"></div>
+    </div>
+
+    <!-- Backup -->
+    <div class="panel">
+      <h2>💾 Backup</h2>
+      <textarea id="backup" readonly></textarea>
+      <button class="btn green" onclick="copyBackup()">📋 Copy</button>
+      <button class="btn green" onclick="downloadBackup()">⬇️ Download</button>
+      <div id="backupMsg" class="small"></div>
+    </div>
+
+    <!-- Restore -->
+    <div class="panel">
+      <h2>♻️ Restore</h2>
+      <div class="small">⚠️ This <b>replaces</b> all progress on this device.</div>
+      <textarea id="restoreText" placeholder="Paste backup here..."></textarea>
+      <input type="file" id="restoreFile" accept=".json,.txt">
+      <br><button class="btn" onclick="restore()">♻️ Restore</button>
+      <div id="restoreMsg" class="small"></div>
+    </div>
+
+    <!-- Danger zone -->
+    <div class="panel">
+      <h2>🧨 Reset</h2>
+      <button class="btn" style="background:#c0392b;color:#fff" onclick="Memory.reset(); render();">🗑️ Padam semua progress</button>
+    </div>
+  </div>
+
+<script src="data.js"></script>
+<script src="sekolah.js"></script>
+<script src="memory.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const TYPES = { word:'🧱 Perkataan (Bina)', syl:'⚒️ Suku Kata (Kraf)', letter:'⛏️ Huruf (Lombong)' };
+const MASTER = 4;
+
+function allItems() {
+  try { return JSON.parse(Memory.exportData()); } catch (e) { return {}; }
+}
+
+const card = (icon, n, label) =>
+  `<div class="card2"><div class="num">${icon} ${n}</div><div class="lbl">${label}</div></div>`;
+
+function emojiFor(type, id) {
+  if (type !== 'word') return '';
+
+  const school =
+    (typeof SCHOOL_UNITS !== 'undefined'
+      ? SCHOOL_UNITS
+      : [])
+    .flatMap(u => u.words || []);
+
+  const w = [...WORDS, ...school]
+    .find(x =>
+      x &&
+      x.word &&
+      x.word.toLowerCase() === id
+    );
+
+  return w ? (w.emoji || '📖') : '';
+}
+
+function render() {
+  const db = allItems();
+  const today = Memory.today();
+  $('today').textContent = today;
+
+  // Summary (words)
+  const s = Memory.stats('word', WORDS.map(w => w.word));
+  $('summary').innerHTML =
+    card('⭐', s.mastered, 'Pandai') + card('📚', s.learning, 'Belajar') +
+    card('🆕', s.fresh, 'Baru') + card('🔁', s.dueToday, 'Ulang hari ini');
+
+  // Group items by type
+  const groups = {};
+  Object.entries(db).forEach(([k, it]) => {
+    const i = k.indexOf(':');
+    const type = k.slice(0, i), id = k.slice(i + 1);
+    (groups[type] = groups[type] || []).push({ id, ...it });
+  });
+
+  $('lists').innerHTML = Object.keys(groups).length ? '' :
+    '<div class="panel">Belum ada progress. Main dulu! 🎮</div>';
+
+  Object.entries(groups).forEach(([type, items]) => {
+    items.sort((a, b) => a.box - b.box || a.due.localeCompare(b.due));   // weakest first
+    const rows = items.map(it => {
+      const boxes = [0, 1, 2, 3].map(i => `<span class="${i < it.box ? 'on' : ''}"></span>`).join('');
+      const dueTxt = it.box >= MASTER ? '⭐ Pandai'
+                   : it.due <= today ? '🔁 Hari ini' : it.due;
+      return `<div class="row">
+        <div class="name">${emojiFor(type, it.id)} ${it.id.toUpperCase()}
+          <div class="counts">✅${it.correct} 👨${it.parentOk} 🤝${it.help} ❌${it.wrong}</div></div>
+        <div class="boxes">${boxes}</div>
+        <div class="due ${it.due <= today && it.box < MASTER ? 'now' : ''}">${dueTxt}</div>
+      </div>`;
+    }).join('');
+    $('lists').innerHTML += `<div class="panel"><h2>${TYPES[type] || type}</h2>${rows}</div>`;
+  });
+
+  // Mic trouble
+  const trouble = Memory.micTrouble();
+  $('micTrouble').innerHTML = trouble.length
+    ? trouble.map(k => `<span class="tag">${k.split(':').pop().toUpperCase()}</span>`).join('')
+    : '<div class="small">👍 Tiada. Mic is doing well!</div>';
+
+  // Backup text
+  $('backup').value = Memory.exportData();
+}
+
+// ===== BACKUP =====
+function copyBackup() {
+  const txt = $('backup').value;
+  const done = () => $('backupMsg').textContent = '✅ Copied! Paste it into WhatsApp (to yourself) or Google Keep.';
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done).catch(fallback);
+  else fallback();
+  function fallback() { $('backup').select(); document.execCommand('copy'); done(); }
+}
+
+function downloadBackup() {
+  const blob = new Blob([$('backup').value], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `dunia-huruf-backup-${Memory.today()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  $('backupMsg').textContent = '✅ Saved to Downloads.';
+}
+
+// ===== RESTORE =====
+async function restore() {
+  let txt = $('restoreText').value.trim();
+  const file = $('restoreFile').files[0];
+  if (!txt && file) txt = (await file.text()).trim();
+  if (!txt) { $('restoreMsg').textContent = '❌ Paste a backup or choose a file first.'; return; }
+  try {
+    JSON.parse(txt);   // check it's valid before replacing anything
+    if (!confirm('Replace all progress on this device?')) return;
+    Memory.importData(txt);
+    $('restoreMsg').textContent = '✅ Restored!';
+    render();
+  } catch (e) {
+    $('restoreMsg').textContent = '❌ That backup looks broken. Copy the whole text, including { and }.';
+  }
+}
+
+render();
+</script>
+</body>
+</html>

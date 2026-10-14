@@ -19,6 +19,8 @@
   .glow { animation:glow .5s infinite alternate; }
   @keyframes glow { to { box-shadow:0 0 20px 8px #ffd700; } }
   .target { font-size:64px; font-weight:bold; color:#fff; text-shadow:4px 4px #3b2a1a; margin-top:10px; }
+  /* 🧠 NEW: progress line on win screen */
+  .stats { font-size:16px; color:#333; margin-bottom:12px; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -47,36 +49,80 @@
       <div class="pEmoji">🏆</div>
       <div class="pWord">Hebat!</div>
       <div id="winBag" style="font-size:28px; margin-bottom:10px;"></div>
+      <div id="winStats" class="stats"></div>  <!-- 🧠 NEW -->
       <button class="btn green" onclick="startRound()">🔁 Main lagi</button>
     </div>
   </div>
 
 <script src="data.js"></script>
 <script src="audio.js"></script>
+<script src="memory.js"></script>  <!-- 🧠 NEW -->
 <script>
 const ROUND = 3;   // syllables per round (short session)
 const $ = (id) => document.getElementById(id);
 const shuffle = (a) => a.sort(() => Math.random() - 0.5);
 const nameOf = (ch) => LETTERS.find(l => l.letter === ch.toUpperCase()).say;   // 'b' gives 'bi'
+const hasMemory = typeof Memory !== 'undefined';   // 🧠 NEW: game still works without memory.js
+const FAM_KEY = 'duniaHuruf.kraf.fam';             // 🧠 NEW: remembers last family
 
 let fam, queue, target, step, tries, busy;
+let mistakes = 0, revealed = false;   // 🧠 NEW: per syllable
+
+// 🧠 NEW: dropdown label with progress, e.g. "B : ba bi bu be bo ⭐3/5"
+function famLabel(c) {
+  let label = c.toUpperCase() + ' : ' + makeSyllables(c).join(' ');
+  if (hasMemory) {
+    const s = Memory.stats('syl', makeSyllables(c));
+    if (s.mastered === VOWELS.length) label += ' ⭐ Pandai';
+    else if (s.mastered) label += ` ⭐${s.mastered}/${VOWELS.length}`;
+    if (s.dueToday) label += ' 🔁';
+  }
+  return label;
+}
+function refreshFamLabels() {
+  [...$('famPick').options].forEach(o => o.text = famLabel(o.value));
+}
 
 // Family selector: B : ba bi bu be bo
-SYLLABLE_CONSONANTS.forEach(c =>
-  $('famPick').add(new Option(c.toUpperCase() + ' : ' + makeSyllables(c).join(' '), c)));
-$('famPick').onchange = startRound;
+SYLLABLE_CONSONANTS.forEach(c => $('famPick').add(new Option(famLabel(c), c)));   // 🧠 CHANGED
+
+// 🧠 NEW: start on the family he played last time
+try {
+  const saved = localStorage.getItem(FAM_KEY);
+  if (saved && SYLLABLE_CONSONANTS.includes(saved)) $('famPick').value = saved;
+} catch (e) {}
+
+$('famPick').onchange = () => {   // 🧠 CHANGED
+  try { localStorage.setItem(FAM_KEY, $('famPick').value); } catch (e) {}
+  startRound();
+};
 
 function startRound() {
   $('win').classList.add('hidden');
   $('bag').innerHTML = '';
   fam = $('famPick').value;
-  queue = shuffle(makeSyllables(fam)).slice(0, ROUND);
+  queue = pickSyllables();   // 🧠 CHANGED: Memory chooses instead of pure random
   nextTarget();
+}
+
+// 🧠 NEW: due/missed syllables first, plus at least 1 new one
+function pickSyllables() {
+  const pool = makeSyllables(fam);
+  if (!hasMemory) return shuffle(pool).slice(0, ROUND);
+  return Memory.pickItems('syl', pool, ROUND);
+}
+
+// 🧠 NEW: save the result for this syllable
+function remember() {
+  const result = revealed ? 'wrong' : mistakes > 0 ? 'help' : 'correct';
+  if (hasMemory) Memory.record('syl', target, result);
+  return result;
 }
 
 function nextTarget() {
   if (!queue.length) return winRound();
   target = queue.shift(); step = 0; tries = 0; busy = false;
+  mistakes = 0; revealed = false;   // 🧠 NEW
   $('s1').textContent = ''; $('s2').textContent = ''; $('res').textContent = '?';
   $('target').textContent = target.toUpperCase();
 
@@ -107,29 +153,46 @@ function tapTile(t) {
     if (step === 2) craft();
   } else {
     tries++;
+    mistakes++;   // 🧠 NEW
     t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
     if (tries === 1) Voice.speak('Hmm, hampir! Cuba lagi.');
-    else { Voice.speak('Cari huruf ' + nameOf(need)); glow(need); }   // 2nd miss: show the answer
+    else {
+      revealed = true;   // 🧠 NEW: he needed the answer shown
+      Voice.speak('Cari huruf ' + nameOf(need)); glow(need);   // 2nd miss: show the answer
+    }
   }
 }
 
 async function craft() {
   busy = true;
+  const result = remember();   // 🧠 NEW: save before the celebration
   SFX.pop();
   $('res').textContent = target.toUpperCase();
   $('res').classList.add('glow');
   await Voice.speak(`${nameOf(target[0])}, ${nameOf(target[1])}... ${target}!`);   // "bi, o... bo!"
   await Voice.speak(`${target}! ${pick(PHRASES.correct)}`);
   $('res').classList.remove('glow');
-  $('bag').innerHTML += `<b style="color:#fff; margin:0 6px">${target.toUpperCase()}</b>`;
+  const star = result === 'correct' ? '⭐' : '';   // 🧠 NEW: star only for "by himself"
+  $('bag').innerHTML += `<b style="color:#fff; margin:0 6px">${target.toUpperCase()}${star}</b>`;
   setTimeout(nextTarget, 600);
 }
 
 function glow(ch)  { document.querySelectorAll('.tile').forEach(t => t.classList.toggle('glow', t.dataset.ch === ch)); }
 function clearGlow() { document.querySelectorAll('.tile').forEach(t => t.classList.remove('glow')); }
 
+// 🧠 NEW: progress for this family on the win screen
+function progressText() {
+  if (!hasMemory) return '';
+  const s = Memory.stats('syl', makeSyllables(fam));
+  let txt = `⭐ ${s.mastered}/${VOWELS.length} suku kata ${fam.toUpperCase()} sudah pandai`;
+  if (s.mastered === VOWELS.length) txt += '<br>🎉 Famili ini siap! Cuba famili seterusnya.';
+  return txt;
+}
+
 function winRound() {
   $('winBag').innerHTML = $('bag').innerHTML;
+  $('winStats').innerHTML = progressText();   // 🧠 NEW
+  refreshFamLabels();                         // 🧠 NEW: update ⭐ counts in the dropdown
   $('win').classList.remove('hidden');
   SFX.win(); confetti();
   Voice.speak(`Hebat! ${makeSyllables(fam).join(', ')}!`);

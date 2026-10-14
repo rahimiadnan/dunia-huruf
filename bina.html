@@ -19,13 +19,21 @@
   .tile.used { opacity:.3; pointer-events:none; }
   .glow { animation:glow .5s infinite alternate; }
   @keyframes glow { to { box-shadow:0 0 20px 8px #ffd700; } }
-  /* 🧠 NEW: progress line on win screen */
   .stats { font-size:16px; color:#333; margin-bottom:12px; line-height:1.6; }
+  /* 📚 NEW: smaller blocks for long words (3+ syllables) */
+  .table.long .slot { min-width:58px; height:58px; font-size:24px; padding:0 4px; }
+  .table.long .slot.result { min-width:180px; }
+  .table.long .op { font-size:22px; }
+  .tiles.long .tile { min-width:62px; height:58px; font-size:26px; }
+  #unitPick { max-width:95vw; font-size:15px; }
+  #micWord { word-break:break-word; }
+  .review { display:inline-block; background:#ffd700; border:3px solid #000; padding:2px 8px; font-weight:bold; }
 </style>
 </head>
 <body>
   <div class="sky">
     <h1>🧱 Bina Perkataan</h1>
+    <select id="unitPick" class="btn"></select>  <!-- 📚 NEW -->
     <div id="hint">Susun suku kata jadi perkataan!</div>
   </div>
 
@@ -53,12 +61,13 @@
       <div class="pEmoji">🏆</div>
       <div class="pWord">Hebat!</div>
       <div id="winBag" style="font-size:28px; margin-bottom:10px;"></div>
-      <div id="winStats" class="stats"></div>  <!-- 🧠 NEW -->
+      <div id="winStats" class="stats"></div>
       <button class="btn green" onclick="startRound()">🔁 Main lagi</button>
     </div>
   </div>
 
 <script src="data.js"></script>
+<script src="sekolah.js"></script>  <!-- 📚 NEW: optional, page still works without it -->
 <script src="audio.js"></script>
 <script src="listen.js"></script>
 <script src="memory.js"></script>
@@ -66,51 +75,181 @@
 const ROUND = 3;   // words per round
 const $ = (id) => document.getElementById(id);
 const shuffle = (a) => a.sort(() => Math.random() - 0.5);
-const hasMemory = typeof Memory !== 'undefined';   // 🧠 NEW: game still works if memory.js is missing
+const hasMemory = typeof Memory !== 'undefined';
+const MODE_KEY = 'duniaHuruf.bina.mode';   // 📚 NEW: remembers last unit
+const MASTER = 4;
 
 let queue, word, step, tries, busy;
 let micBusy = false, micTries = 0;
-let buildMistakes = 0;   // 🧠 NEW: wrong tiles for this word (all steps)
+let buildMistakes = 0;
+let mode, played = 0;              // 📚 NEW
+let reviewIds = [];                // 📚 NEW: words brought back from older units
+
+// ===== 📚 NEW: LOAD + CHECK WORDS =====
+// Cleans each entry. A broken entry is skipped (with a warning) instead of crashing the game.
+function cleanWord(w, where) {
+  if (!w || typeof w.word !== 'string' || !Array.isArray(w.syl) || !w.syl.length) {
+    console.warn('⚠️ Skipped a broken word in ' + where + ':', w);
+    return null;
+  }
+  const word = w.word.toLowerCase().trim();
+  const syl = w.syl.map(s => String(s).toLowerCase().trim());
+  if (syl.join('') !== word.replace(/[\s-]/g, '')) {
+    console.warn(`⚠️ Check syllables for "${word}" in ${where}: [${syl.join(', ')}] doesn't spell the word`);
+  }
+  return {
+    word, syl,
+    emoji: w.emoji || '📖',
+    accept: [...new Set([word, ...(w.accept || []).map(a => String(a).toLowerCase())])]
+  };
+}
+
+const BASIC = WORDS.map(w => cleanWord(w, 'data.js')).filter(Boolean);
+
+const UNITS = (typeof SCHOOL_UNITS !== 'undefined' ? SCHOOL_UNITS : [])
+  .filter(u => u && u.id && Array.isArray(u.words))
+  .map(u => ({ ...u, words: u.words.map(w => cleanWord(w, 'sekolah.js / ' + u.id)).filter(Boolean) }))
+  .filter(u => u.words.length);
+
+// Every word once (school version wins if the same word is in both)
+const ALL = (() => {
+  const map = new Map();
+  [...BASIC, ...UNITS.flatMap(u => u.words)].forEach(w => map.set(w.word, w));
+  return [...map.values()];
+})();
+
+const findWord = (id) => ALL.find(w => w.word === id);
+const idsOf = (list) => list.map(w => w.word);
+
+function poolFor(m) {
+  if (m === 'asas') return BASIC;
+  if (m === 'campur') return ALL;
+  const u = UNITS.find(u => u.id === m);
+  return u ? u.words : BASIC;
+}
+
+// ===== 📚 NEW: UNIT SELECTOR =====
+function unitLabel(m) {
+  let label;
+  if (m === 'asas') label = '🧱 Asas';
+  else if (m === 'campur') label = '🎲 Campur (semua)';
+  else {
+    const u = UNITS.find(u => u.id === m);
+    label = '📚 ' + [u.week, u.title].filter(Boolean).join(': ');
+  }
+  if (hasMemory) {
+    const pool = poolFor(m);
+    const s = Memory.stats('word', idsOf(pool));
+    label += ` ⭐${s.mastered}/${pool.length}`;
+    if (s.dueToday) label += ' 🔁';
+  }
+  return label;
+}
+
+function buildSelector() {
+  const modes = [...UNITS.map(u => u.id), 'asas', 'campur'];
+  $('unitPick').innerHTML = '';
+  modes.forEach(m => $('unitPick').add(new Option(unitLabel(m), m)));
+
+  // Start on last played unit, else the newest school unit, else Asas
+  let saved = null;
+  try { saved = localStorage.getItem(MODE_KEY); } catch (e) {}
+  $('unitPick').value = modes.includes(saved) ? saved
+                      : UNITS.length ? UNITS[UNITS.length - 1].id : 'asas';
+}
+
+function refreshLabels() {
+  [...$('unitPick').options].forEach(o => o.text = unitLabel(o.value));
+}
+
+$('unitPick').onchange = () => {
+  try { localStorage.setItem(MODE_KEY, $('unitPick').value); } catch (e) {}
+  startRound();
+};
 
 // ===== ROUND SETUP =====
 function startRound() {
   $('win').classList.add('hidden');
   $('bag').innerHTML = '';
-  queue = pickWords();   // 🧠 CHANGED: Memory chooses instead of pure random
+  mode = $('unitPick').value;
+  played = 0;
+  queue = pickWords();
   nextWord();
 }
 
-// 🧠 NEW: missed/due words first, plus at least 1 new word
-function pickWords() {
-  if (!hasMemory) return shuffle([...WORDS]).slice(0, ROUND);
-  const ids = Memory.pickItems('word', WORDS.map(w => w.word), ROUND);
-  return ids.map(id => WORDS.find(w => w.word === id)).filter(Boolean);
+// 📚 NEW: words from older units that are due today
+function dueElsewhere(poolIds) {
+  if (!hasMemory) return [];
+  let db = {};
+  try { db = JSON.parse(Memory.exportData()); } catch (e) {}
+  const t = Memory.today();
+  return idsOf(ALL).filter(id => {
+    if (poolIds.includes(id)) return false;
+    const it = db['word:' + id];
+    return it && it.due <= t && it.box < MASTER;
+  });
 }
 
-// 🧠 NEW: save the result for the current word
+// 📚 CHANGED: this unit's words + maybe 1 review from an older unit
+function pickWords() {
+  const pool = poolFor(mode);
+  reviewIds = [];
+  if (!hasMemory) return shuffle([...pool]).slice(0, ROUND);
+
+  const poolIds = idsOf(pool);
+  const isUnit = mode !== 'asas' && mode !== 'campur';
+  const old = isUnit ? dueElsewhere(poolIds) : [];
+
+  let ids;
+  if (old.length) {
+    ids = Memory.pickItems('word', poolIds, ROUND - 1);
+    const r = pick(old);
+    reviewIds = [r];
+    ids = shuffle([...ids, r]);
+  } else {
+    ids = Memory.pickItems('word', poolIds, ROUND);
+  }
+  return ids.map(findWord).filter(Boolean);
+}
+
 function remember(result) {
   if (!hasMemory) return;
-  // Tile mistakes mean he needed help reading, so no box promotion today
   if (buildMistakes > 0 && (result === 'correct' || result === 'parent')) result = 'help';
   Memory.record('word', word.word, result);
 }
 
-// Decoys from the same families, e.g. BOLA gives BI, LU (trains reading the vowel)
+// 📚 CHANGED: decoys swap the vowel, so they work for any syllable
+// 'bo' gives ba, bi... | 'dik' gives dak, duk... | 'mah' gives mih, muh...
+function lookAlikes(s) {
+  const i = [...s].findIndex(ch => VOWELS.includes(ch));
+  if (i < 0) return [];
+  return VOWELS.filter(v => v !== s[i]).map(v => s.slice(0, i) + v + s.slice(i + 1));
+}
 function makeDecoys(syl) {
-  const fam = syl.filter(s => s.length === 2).flatMap(s => makeSyllables(s[0]));
-  return shuffle(fam.filter(s => !syl.includes(s))).slice(0, 2);
+  const all = [...new Set(syl.flatMap(lookAlikes))].filter(s => !syl.includes(s));
+  return shuffle(all).slice(0, 2);
 }
 
 function nextWord() {
   if (!queue.length) return winRound();
   word = queue.shift(); step = 0; tries = 0; busy = false;
   micBusy = false; micTries = 0;
-  buildMistakes = 0;   // 🧠 NEW
+  buildMistakes = 0;
   $('micPanel').classList.add('hidden');
   $('tiles').style.display = '';
   $('pic').textContent = word.emoji;
 
-  // Slots: [ ] + [ ] = [ ? ]
+  // 📚 NEW: tell him (and you) when it's an old word coming back
+  $('hint').innerHTML = reviewIds.includes(word.word)
+    ? '<span class="review">🔁 Ulang kaji!</span>'
+    : 'Susun suku kata jadi perkataan!';
+
+  // 📚 NEW: smaller blocks for long words
+  const long = word.syl.length >= 3;
+  $('table').classList.toggle('long', long);
+  $('tiles').classList.toggle('long', long);
+
+  // Slots: [ ] + [ ] + [ ] = [ ? ]
   $('table').innerHTML = word.syl.map((s, i) =>
       `<div class="slot" id="s${i}"></div>` + (i < word.syl.length - 1 ? '<span class="op">+</span>' : '')
     ).join('') + '<span class="op">=</span><div id="res" class="slot result">?</div>';
@@ -144,9 +283,9 @@ function tapTile(t) {
     return;
   }
   tries++;
-  buildMistakes++;   // 🧠 NEW
+  buildMistakes++;
   t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
-  if (word.syl.includes(t.dataset.s)) Voice.speak(`Betul ada! Tapi mula dengan ${need} dulu.`);
+  if (word.syl.slice(step).includes(t.dataset.s)) Voice.speak(`Betul ada! Tapi sekarang cari ${need} dulu.`);
   else if (tries === 1) Voice.speak('Hmm, hampir! Cuba lagi.');
   else { Voice.speak('Cari ' + need); glow(need); }   // 2nd miss: show the answer
 }
@@ -156,7 +295,7 @@ async function build() {
   SFX.pop();
   $('res').textContent = word.word.toUpperCase();
   $('res').classList.add('glow');
-  await Voice.speak(word.syl.join('... ') + '... ' + word.word + '!');   // "bo... la... bola!"
+  await Voice.speak(word.syl.join('... ') + '... ' + word.word + '!');   // "ke... re... ta... kereta!"
   $('res').classList.remove('glow');
 
   // His turn to say it
@@ -172,23 +311,23 @@ async function build() {
 async function tapMic() {
   if (micBusy) return;
   micBusy = true;
-  speechSynthesis.cancel();                  // stop talking so the mic doesn't hear the game
+  speechSynthesis.cancel();
   const btn = $('micBtn');
   btn.textContent = '👂'; btn.classList.add('glow');
-  SFX.beep(880, 0.12, 'sine');               // "your turn" ping
+  SFX.beep(880, 0.12, 'sine');
   const heard = await Listen.hear('ms');
   btn.textContent = '🎤'; btn.classList.remove('glow');
   $('heardText').textContent = heard.length ? '👂 ' + heard[0] : '👂 ...';
 
-  if (!heard.length) {                       // heard nothing: no penalty
+  if (!heard.length) {
     await Voice.speak('Tak dengar lah. Cakap kuat sikit ya!');
-  } else if (isMatch(heard, [word.word])) {
-    return micSuccess(true, micTries === 0 ? 'correct' : 'help');   // 🧠 CHANGED
+  } else if (isMatch(heard, word.accept)) {   // 📚 CHANGED: uses the accept list
+    return micSuccess(true, micTries === 0 ? 'correct' : 'help');
   } else {
     micTries++;
     if (micTries === 1) {
       await Voice.speak('Hmm, hampir betul! Dengar sekali lagi ya... ' + word.word);
-    } else if (micTries === 2) {             // slow, with glowing syllables
+    } else if (micTries === 2) {
       await Voice.speak('Tak apa. Dengar perlahan-lahan...');
       for (let i = 0; i < word.syl.length; i++) {
         $('s' + i).classList.add('glow');
@@ -196,17 +335,17 @@ async function tapMic() {
         $('s' + i).classList.remove('glow');
       }
       await Voice.speak(word.word + '. Cuba lagi!');
-    } else {                                 // 3rd miss: say it together, move on
+    } else {
       await Voice.speak('Jom sebut sama-sama! ' + word.syl.join('... ') + '... ' + word.word + '!');
-      return micSuccess(false, 'wrong');     // 🧠 CHANGED: comes back tomorrow
+      return micSuccess(false, 'wrong');
     }
   }
   micBusy = false;
 }
 
-// 🧠 CHANGED: now also receives the memory result
 async function micSuccess(byHimself, result) {
-  remember(result);   // 🧠 NEW
+  remember(result);
+  played++;   // 📚 NEW
   $('micPanel').classList.add('hidden');
   SFX.win();
   const star = byHimself ? '⭐' : '';
@@ -218,27 +357,31 @@ async function micSuccess(byHimself, result) {
 function parentOK() {
   if (micBusy) return;
   micBusy = true;
-  micSuccess(true, 'parent');   // 🧠 CHANGED
+  micSuccess(true, 'parent');
 }
 
 // ===== HELPERS =====
 function glow(s) { document.querySelectorAll('.tile:not(.used)').forEach(t => t.classList.toggle('glow', t.dataset.s === s)); }
 function clearGlow() { document.querySelectorAll('.tile').forEach(t => t.classList.remove('glow')); }
 
-// 🧠 NEW: progress line for the win screen
+// 📚 CHANGED: progress for the selected unit
 function progressText() {
   if (!hasMemory) return '';
-  const s = Memory.stats('word', WORDS.map(w => w.word));
-  return `⭐ ${s.mastered}/${WORDS.length} sudah pandai<br>` +
-         `📚 ${s.learning} sedang belajar · 🆕 ${s.fresh} baru`;
+  const pool = poolFor(mode);
+  const s = Memory.stats('word', idsOf(pool));
+  let txt = `⭐ ${s.mastered}/${pool.length} sudah pandai<br>` +
+            `📚 ${s.learning} sedang belajar · 🆕 ${s.fresh} baru`;
+  if (pool.length && s.mastered === pool.length) txt += '<br>🎉 Unit ini siap!';
+  return txt;
 }
 
 function winRound() {
   $('winBag').innerHTML = $('bag').innerHTML;
-  $('winStats').innerHTML = progressText();   // 🧠 NEW
+  $('winStats').innerHTML = progressText();
+  refreshLabels();   // 📚 NEW: update ⭐ counts in the selector
   $('win').classList.remove('hidden');
   SFX.win(); confetti();
-  Voice.speak(`Hebat! Kamu bina ${ROUND} perkataan!`);
+  Voice.speak(`Hebat! Kamu bina ${played} perkataan!`);
 }
 
 function confetti() {
@@ -254,6 +397,7 @@ function confetti() {
   }
 }
 
+buildSelector();   // 📚 NEW
 startRound();
 </script>
 </body>
