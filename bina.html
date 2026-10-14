@@ -19,6 +19,8 @@
   .tile.used { opacity:.3; pointer-events:none; }
   .glow { animation:glow .5s infinite alternate; }
   @keyframes glow { to { box-shadow:0 0 20px 8px #ffd700; } }
+  /* 🧠 NEW: progress line on win screen */
+  .stats { font-size:16px; color:#333; margin-bottom:12px; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -51,6 +53,7 @@
       <div class="pEmoji">🏆</div>
       <div class="pWord">Hebat!</div>
       <div id="winBag" style="font-size:28px; margin-bottom:10px;"></div>
+      <div id="winStats" class="stats"></div>  <!-- 🧠 NEW -->
       <button class="btn green" onclick="startRound()">🔁 Main lagi</button>
     </div>
   </div>
@@ -63,26 +66,33 @@
 const ROUND = 3;   // words per round
 const $ = (id) => document.getElementById(id);
 const shuffle = (a) => a.sort(() => Math.random() - 0.5);
+const hasMemory = typeof Memory !== 'undefined';   // 🧠 NEW: game still works if memory.js is missing
 
 let queue, word, step, tries, busy;
 let micBusy = false, micTries = 0;
+let buildMistakes = 0;   // 🧠 NEW: wrong tiles for this word (all steps)
 
 // ===== ROUND SETUP =====
 function startRound() {
   $('win').classList.add('hidden');
   $('bag').innerHTML = '';
-
-  const ids = Memory.pickItems(
-    'word',
-    WORDS.map(w => w.word),
-    ROUND
-  );
-
-  queue = ids.map(id =>
-    WORDS.find(w => w.word === id)
-  );
-
+  queue = pickWords();   // 🧠 CHANGED: Memory chooses instead of pure random
   nextWord();
+}
+
+// 🧠 NEW: missed/due words first, plus at least 1 new word
+function pickWords() {
+  if (!hasMemory) return shuffle([...WORDS]).slice(0, ROUND);
+  const ids = Memory.pickItems('word', WORDS.map(w => w.word), ROUND);
+  return ids.map(id => WORDS.find(w => w.word === id)).filter(Boolean);
+}
+
+// 🧠 NEW: save the result for the current word
+function remember(result) {
+  if (!hasMemory) return;
+  // Tile mistakes mean he needed help reading, so no box promotion today
+  if (buildMistakes > 0 && (result === 'correct' || result === 'parent')) result = 'help';
+  Memory.record('word', word.word, result);
 }
 
 // Decoys from the same families, e.g. BOLA gives BI, LU (trains reading the vowel)
@@ -95,6 +105,7 @@ function nextWord() {
   if (!queue.length) return winRound();
   word = queue.shift(); step = 0; tries = 0; busy = false;
   micBusy = false; micTries = 0;
+  buildMistakes = 0;   // 🧠 NEW
   $('micPanel').classList.add('hidden');
   $('tiles').style.display = '';
   $('pic').textContent = word.emoji;
@@ -133,6 +144,7 @@ function tapTile(t) {
     return;
   }
   tries++;
+  buildMistakes++;   // 🧠 NEW
   t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
   if (word.syl.includes(t.dataset.s)) Voice.speak(`Betul ada! Tapi mula dengan ${need} dulu.`);
   else if (tries === 1) Voice.speak('Hmm, hampir! Cuba lagi.');
@@ -171,7 +183,7 @@ async function tapMic() {
   if (!heard.length) {                       // heard nothing: no penalty
     await Voice.speak('Tak dengar lah. Cakap kuat sikit ya!');
   } else if (isMatch(heard, [word.word])) {
-    return micSuccess(true);
+    return micSuccess(true, micTries === 0 ? 'correct' : 'help');   // 🧠 CHANGED
   } else {
     micTries++;
     if (micTries === 1) {
@@ -186,13 +198,15 @@ async function tapMic() {
       await Voice.speak(word.word + '. Cuba lagi!');
     } else {                                 // 3rd miss: say it together, move on
       await Voice.speak('Jom sebut sama-sama! ' + word.syl.join('... ') + '... ' + word.word + '!');
-      return micSuccess(false);
+      return micSuccess(false, 'wrong');     // 🧠 CHANGED: comes back tomorrow
     }
   }
   micBusy = false;
 }
 
-async function micSuccess(byHimself) {
+// 🧠 CHANGED: now also receives the memory result
+async function micSuccess(byHimself, result) {
+  remember(result);   // 🧠 NEW
   $('micPanel').classList.add('hidden');
   SFX.win();
   const star = byHimself ? '⭐' : '';
@@ -204,15 +218,24 @@ async function micSuccess(byHimself) {
 function parentOK() {
   if (micBusy) return;
   micBusy = true;
-  micSuccess(true);
+  micSuccess(true, 'parent');   // 🧠 CHANGED
 }
 
 // ===== HELPERS =====
 function glow(s) { document.querySelectorAll('.tile:not(.used)').forEach(t => t.classList.toggle('glow', t.dataset.s === s)); }
 function clearGlow() { document.querySelectorAll('.tile').forEach(t => t.classList.remove('glow')); }
 
+// 🧠 NEW: progress line for the win screen
+function progressText() {
+  if (!hasMemory) return '';
+  const s = Memory.stats('word', WORDS.map(w => w.word));
+  return `⭐ ${s.mastered}/${WORDS.length} sudah pandai<br>` +
+         `📚 ${s.learning} sedang belajar · 🆕 ${s.fresh} baru`;
+}
+
 function winRound() {
   $('winBag').innerHTML = $('bag').innerHTML;
+  $('winStats').innerHTML = progressText();   // 🧠 NEW
   $('win').classList.remove('hidden');
   SFX.win(); confetti();
   Voice.speak(`Hebat! Kamu bina ${ROUND} perkataan!`);
